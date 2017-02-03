@@ -12,10 +12,13 @@
     <string id="30009">Transcode: </string>
     <string id="30010">Enable Performance Profiling</string>
     <string id="30011">Local caching system</string>
+    <string id="30012">OK</string>
+    <string id="30013">Never show</string>
 
     <string id="30014">Connection</string>
     <string id="30015">Network</string>    
-    <string id="30016">Device Name</string>        
+    <string id="30016">Device Name</string>
+    <string id="30017">Unauthorized for PMS</string>     
 
     <string id="30022">Advanced</string>
     <string id="30024">Username</string><!-- Verified -->
@@ -363,7 +366,7 @@
     <string id="39001">Boost audio when transcoding</string>
     <string id="39002">Burnt-in subtitle size</string>
     <string id="39003">Limit download sync threads (rec. for rpi: 1)</string>
-    <string id="39004">Enable Plex Companion</string>
+    <string id="39004">Enable Plex Companion (restart Kodi!)</string>
     <string id="39005">Plex Companion Port (change only if needed)</string>
     <string id="39006">Activate Plex Companion debug log</string>
     <string id="39007">Activate Plex Companion GDM debug log</string>
@@ -438,6 +441,8 @@
     <string id="39075">Always use default Plex subtitle if possible</string>
     <string id="39076">If you use several Plex libraries of one kind, e.g. "Kids Movies" and "Parents Movies", be sure to check the Wiki: https://goo.gl/JFtQV9</string>
     <string id="39077">Number of PMS items to show in widgets (e.g. "On Deck")</string>
+    <string id="39078">Plex Companion Update Port (change only if needed)</string>
+    <string id="39079">Plex Companion could not open the GDM port. Please change it in the PKC settings.</string>
 
     <!-- Plex Entrypoint.py -->
     <string id="39200">Log-out Plex Home User </string>
@@ -502,5 +507,9 @@
     <string id="39500">On Deck</string>
     <string id="39501">Collections</string>
 
-
+    <!-- Plex utils.py -->
+    <string id="39600">Are you sure you want to reset your local Kodi database? A re-sync of the Plex data will take time afterwards.</string>
+    <string id="39601">Could not stop the database from running. Please try again later.</string>
+    <string id="39602">Remove all cached artwork? (recommended!)</string>
+    <string id="39603">Reset all PlexKodiConnect Addon settings? (this is usually NOT recommended and unnecessary!)</string>
 </strings>

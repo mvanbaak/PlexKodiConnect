@@ -4,6 +4,7 @@
 
 from utils import kodiSQL
 import logging
+import variables as v
 
 ###############################################################################
 
@@ -51,21 +52,26 @@ class Plex_DB_Functions():
 
     def getAllViewInfo(self):
         """
-        Returns a list of dicts:
-            {'id': view_id, 'name': view_name, 'itemtype': kodi_type}
+        Returns a list of dicts for all Plex libraries:
+        {
+            'id': view_id,
+            'name': view_name,
+            'itemtype': kodi_type
+            'kodi_tagid'
+            'sync_to_kodi'
+        }
         """
         plexcursor = self.plexcursor
         views = []
-        query = '''
-            SELECT view_id, view_name, kodi_type
-            FROM view
-        '''
+        query = '''SELECT * FROM view'''
         plexcursor.execute(query)
         rows = plexcursor.fetchall()
         for row in rows:
             views.append({'id': row[0],
                           'name': row[1],
-                          'itemtype': row[2]})
+                          'itemtype': row[2],
+                          'kodi_tagid': row[3],
+                          'sync_to_kodi': row[4]})
         return views
 
     def getView_byId(self, view_id):
@@ -118,17 +124,23 @@ class Plex_DB_Functions():
             view = None
         return view
 
-    def addView(self, view_id, view_name, kodi_type, kodi_tagid):
+    def addView(self, view_id, view_name, kodi_type, kodi_tagid, sync=True):
         """
         Appends an entry to the view table
+
+        sync=False: Plex library won't be synced to Kodi
         """
         query = '''
             INSERT INTO view(
-                view_id, view_name, kodi_type, kodi_tagid)
-            VALUES (?, ?, ?, ?)
+                view_id, view_name, kodi_type, kodi_tagid, sync_to_kodi)
+            VALUES (?, ?, ?, ?, ?)
             '''
         self.plexcursor.execute(query,
-                                (view_id, view_name, kodi_type, kodi_tagid))
+                                (view_id,
+                                 view_name,
+                                 kodi_type,
+                                 kodi_tagid,
+                                 1 if sync is True else 0))
 
     def updateView(self, view_name, kodi_tagid, view_id):
         """
@@ -147,6 +159,22 @@ class Plex_DB_Functions():
             WHERE view_id = ?
         '''
         self.plexcursor.execute(query, (view_id,))
+
+    def get_items_by_viewid(self, view_id):
+        """
+        Returns a list for view_id with one item like this:
+        {
+            'plex_id': xxx
+            'kodi_type': xxx
+        }
+        """
+        query = '''SELECT plex_id, kodi_type FROM plex WHERE view_id = ?'''
+        self.plexcursor.execute(query, (view_id, ))
+        rows = self.plexcursor.fetchall()
+        res = []
+        for row in rows:
+            res.append({'plex_id': row[0], 'kodi_type': row[1]})
+        return res
 
     def getItem_byFileId(self, kodi_fileid, kodi_type):
         """
@@ -307,12 +335,12 @@ class Plex_DB_Functions():
         query = '''
             INSERT OR REPLACE INTO plex(
                 plex_id, kodi_id, kodi_fileid, kodi_pathid, plex_type,
-                kodi_type, parent_id, checksum, view_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                kodi_type, parent_id, checksum, view_id, fanart_synced)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             '''
         self.plexcursor.execute(query, (plex_id, kodi_id, kodi_fileid,
                                         kodi_pathid, plex_type, kodi_type,
-                                        parent_id, checksum, view_id))
+                                        parent_id, checksum, view_id, 0))
 
     def updateReference(self, plex_id, checksum):
         """
@@ -368,7 +396,7 @@ class Plex_DB_Functions():
         """
         Returns a list of dicts for plex_type:
         {
-            'plexId': plex_id
+            'plex_id': plex_id
             'kodiId': kodi_id
             'kodi_type': kodi_type
             'plex_type': plex_type
@@ -383,9 +411,37 @@ class Plex_DB_Functions():
         result = []
         for row in self.plexcursor.fetchall():
             result.append({
-                'plexId': row[0],
+                'plex_id': row[0],
                 'kodiId': row[1],
                 'kodi_type': row[2],
                 'plex_type': plex_type
             })
+        return result
+
+    def set_fanart_synched(self, plex_id):
+        """
+        Sets the fanart_synced flag to 1 for plex_id
+        """
+        query = '''UPDATE plex SET fanart_synced = 1 WHERE plex_id = ?'''
+        self.plexcursor.execute(query, (plex_id,))
+
+    def get_missing_fanart(self):
+        """
+        Returns a list of {'plex_id': x, 'plex_type': y} where fanart_synced
+        flag is set to 0
+
+        This only for plex_type is either movie or TV show
+        """
+        query = '''
+            SELECT plex_id, plex_type FROM plex
+            WHERE fanart_synced = ?
+            AND (plex_type = ? OR plex_type = ?)
+        '''
+        self.plexcursor.execute(query,
+                                (0, v.PLEX_TYPE_MOVIE, v.PLEX_TYPE_SHOW))
+        rows = self.plexcursor.fetchall()
+        result = []
+        for row in rows:
+            result.append({'plex_id': row[0],
+                           'plex_type': row[1]})
         return result

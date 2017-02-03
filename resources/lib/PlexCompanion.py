@@ -9,9 +9,10 @@ from xbmc import sleep
 from utils import settings, ThreadMethodsAdditionalSuspend, ThreadMethods
 from plexbmchelper import listener, plexgdm, subscribers, functions, \
     httppersist, plexsettings
-from PlexFunctions import ParseContainerKey, KODI_PLAYLIST_TYPE_FROM_PLEX_TYPE
+from PlexFunctions import ParseContainerKey
 import player
 from entrypoint import Plex_Node
+from variables import KODI_PLAYLIST_TYPE_FROM_PLEX_TYPE
 
 ###############################################################################
 
@@ -175,9 +176,9 @@ class PlexCompanion(Thread):
                         if client.check_client_registration():
                             log.debug("Client is still registered")
                         else:
-                            log.info("Client is no longer registered. "
-                                     "Plex Companion still running on port %s"
-                                     % self.settings['myport'])
+                            log.debug("Client is no longer registered. "
+                                      "Plex Companion still running on port %s"
+                                      % self.settings['myport'])
                 # Get and set servers
                 if message_count % 30 == 0:
                     subscriptionManager.serverlist = client.getServerList()

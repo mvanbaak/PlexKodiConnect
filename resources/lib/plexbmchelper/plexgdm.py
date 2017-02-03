@@ -29,7 +29,7 @@ import time
 from xbmc import sleep
 
 import downloadutils
-from utils import window, settings
+from utils import window, settings, dialog, language
 
 ###############################################################################
 
@@ -49,7 +49,7 @@ class plexgdm:
         self._multicast_address = '239.0.0.250'
         self.discover_group = (self._multicast_address, 32414)
         self.client_register_group = (self._multicast_address, 32413)
-        self.client_update_port = 32412
+        self.client_update_port = int(settings('companionUpdatePort'))
 
         self.server_list = []
         self.discovery_interval = 120
@@ -104,8 +104,20 @@ class plexgdm:
         try:
             update_sock.bind(('0.0.0.0', self.client_update_port))
         except:
-            log.error("Unable to bind to port [%s] - client will not be "
-                      "registered" % self.client_update_port)
+            log.error("Unable to bind to port [%s] - Plex Companion will not "
+                      "be registered. Change the Plex Companion update port!"
+                      % self.client_update_port)
+            if settings('companion_show_gdm_port_warning') == 'true':
+                if dialog('yesno',
+                          language(29999),
+                          'Port %s' % self.client_update_port,
+                          language(39079),
+                          yeslabel=language(30013),  # Never show again
+                          nolabel=language(30012)):  # OK
+                    settings('companion_show_gdm_port_warning', value='false')
+                from xbmc import executebuiltin
+                executebuiltin(
+                    'Addon.OpenSettings(plugin.video.plexkodiconnect)')
             return
 
         update_sock.setsockopt(socket.IPPROTO_IP,

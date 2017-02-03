@@ -2,34 +2,33 @@
 
 ###############################################################################
 import logging
-import cProfile
-import json
-import pstats
-import sqlite3
+from cProfile import Profile
+from json import loads, dumps
+from pstats import Stats
+from sqlite3 import connect, OperationalError
 from datetime import datetime, timedelta
-import StringIO
-import time
-import unicodedata
+from StringIO import StringIO
+from time import localtime, strftime, strptime
+from unicodedata import normalize
 import xml.etree.ElementTree as etree
 from functools import wraps
 from calendar import timegm
-import os
+from os import path as os_path
 
 import xbmc
 import xbmcaddon
 import xbmcgui
 import xbmcvfs
 
+from variables import DB_VIDEO_PATH, DB_MUSIC_PATH, DB_TEXTURE_PATH, \
+    DB_PLEX_PATH
+
 ###############################################################################
 
 log = logging.getLogger("PLEX."+__name__)
 
-addonName = 'PlexKodiConnect'
 WINDOW = xbmcgui.Window(10000)
 ADDON = xbmcaddon.Addon(id='plugin.video.plexkodiconnect')
-
-KODILANGUAGE = xbmc.getLanguage(xbmc.ISO_639_1)
-KODIVERSION = int(xbmc.getInfoLabel("System.BuildVersion")[:2])
 
 ###############################################################################
 # Main methods
@@ -95,18 +94,50 @@ def language(stringid):
     return ADDON.getLocalizedString(stringid)
 
 
-def dialog(type_, *args, **kwargs):
+def dialog(typus, *args, **kwargs):
+    """
+    Displays xbmcgui Dialog. Pass a string as typus:
+        'yesno', 'ok', 'notification', 'input', 'select', 'numeric'
 
+    Icons:
+        icon='{plex}'       Display Plex standard icon
+        icon='{info}'       xbmcgui.NOTIFICATION_INFO
+        icon='{warning}'    xbmcgui.NOTIFICATION_WARNING
+        icon='{error}'      xbmcgui.NOTIFICATION_ERROR
+
+    Input Types:
+        type='{alphanum}'   xbmcgui.INPUT_ALPHANUM (standard keyboard)
+        type='{numeric}'    xbmcgui.INPUT_NUMERIC (format: #)
+        type='{date}'       xbmcgui.INPUT_DATE (format: DD/MM/YYYY)
+        type='{time}'       xbmcgui.INPUT_TIME (format: HH:MM)
+        type='{ipaddress}'  xbmcgui.INPUT_IPADDRESS (format: #.#.#.#)
+        type='{password}'   xbmcgui.INPUT_PASSWORD
+                            (return md5 hash of input, input is masked)
+    """
     d = xbmcgui.Dialog()
-
     if "icon" in kwargs:
-        kwargs['icon'] = kwargs['icon'].replace(
-            "{plex}",
-            "special://home/addons/plugin.video.plexkodiconnect/icon.png")
+        types = {
+            '{plex}': 'special://home/addons/plugin.video.plexkodiconnect/icon.png',
+            '{info}': xbmcgui.NOTIFICATION_INFO,
+            '{warning}': xbmcgui.NOTIFICATION_WARNING,
+            '{error}': xbmcgui.NOTIFICATION_ERROR
+        }
+        for key, value in types.iteritems():
+            kwargs['icon'] = kwargs['icon'].replace(key, value)
+    if 'type' in kwargs:
+        types = {
+            '{alphanum}': xbmcgui.INPUT_ALPHANUM,
+            '{numeric}': xbmcgui.INPUT_NUMERIC,
+            '{date}': xbmcgui.INPUT_DATE,
+            '{time}': xbmcgui.INPUT_TIME,
+            '{ipaddress}': xbmcgui.INPUT_IPADDRESS,
+            '{password}': xbmcgui.INPUT_PASSWORD
+        }
+        for key, value in types.iteritems():
+            kwargs['type'] = kwargs['type'].replace(key, value)
     if "heading" in kwargs:
         kwargs['heading'] = kwargs['heading'].replace("{plex}",
                                                       language(29999))
-
     types = {
         'yesno': d.yesno,
         'ok': d.ok,
@@ -115,7 +146,7 @@ def dialog(type_, *args, **kwargs):
         'select': d.select,
         'numeric': d.numeric
     }
-    return types[type_](*args, **kwargs)
+    return types[typus](*args, **kwargs)
 
 
 def tryEncode(uniString, encoding='utf-8'):
@@ -161,8 +192,8 @@ def DateToKodi(stamp):
     """
     try:
         stamp = float(stamp) + float(window('kodiplextimeoffset'))
-        date_time = time.localtime(stamp)
-        localdate = time.strftime('%Y-%m-%d %H:%M:%S', date_time)
+        date_time = localtime(stamp)
+        localdate = strftime('%Y-%m-%d %H:%M:%S', date_time)
     except:
         localdate = None
     return localdate
@@ -176,7 +207,7 @@ def IfExists(path):
 
     Returns True if path exists, else false
     """
-    dummyfile = tryEncode(os.path.join(path, 'dummyfile.txt'))
+    dummyfile = tryEncode(os_path.join(path, 'dummyfile.txt'))
     try:
         etree.ElementTree(etree.Element('test')).write(dummyfile)
     except:
@@ -216,35 +247,15 @@ def getUnixTimestamp(secondsIntoTheFuture=None):
 
 
 def kodiSQL(media_type="video"):
-
     if media_type == "plex":
-        dbPath = tryDecode(xbmc.translatePath("special://database/plex.db"))
+        dbPath = DB_PLEX_PATH
     elif media_type == "music":
-        dbPath = getKodiMusicDBPath()
+        dbPath = DB_MUSIC_PATH
     elif media_type == "texture":
-        dbPath = tryDecode(xbmc.translatePath(
-            "special://database/Textures13.db"))
+        dbPath = DB_TEXTURE_PATH
     else:
-        dbPath = getKodiVideoDBPath()
-
-    connection = sqlite3.connect(dbPath, timeout=60.0)
-    return connection
-
-def getKodiVideoDBPath():
-
-    dbVersion = {
-
-        "13": 78,   # Gotham
-        "14": 90,   # Helix
-        "15": 93,   # Isengard
-        "16": 99,   # Jarvis
-        "17": 107   # Krypton
-    }
-
-    dbPath = tryDecode(xbmc.translatePath(
-        "special://database/MyVideos%s.db"
-        % dbVersion.get(xbmc.getInfoLabel('System.BuildVersion')[:2], "")))
-    return dbPath
+        dbPath = DB_VIDEO_PATH
+    return connect(dbPath, timeout=60.0)
 
 
 def create_actor_db_index():
@@ -258,28 +269,12 @@ def create_actor_db_index():
             CREATE UNIQUE INDEX index_name
             ON actor (name);
         """)
-    except sqlite3.OperationalError:
+    except OperationalError:
         # Index already exists
         pass
     conn.commit()
     conn.close()
 
-
-def getKodiMusicDBPath():
-
-    dbVersion = {
-
-        "13": 46,   # Gotham
-        "14": 48,   # Helix
-        "15": 52,   # Isengard
-        "16": 56,   # Jarvis
-        "17": 60    # Krypton
-    }
-
-    dbPath = tryDecode(xbmc.translatePath(
-        "special://database/MyMusic%s.db"
-        % dbVersion.get(xbmc.getInfoLabel('System.BuildVersion')[:2], "")))
-    return dbPath
 
 def getScreensaver():
     # Get the current screensaver value
@@ -293,7 +288,7 @@ def getScreensaver():
             'setting': "screensaver.mode"
         }
     }
-    return json.loads(xbmc.executeJSONRPC(json.dumps(query)))['result']['value']
+    return loads(xbmc.executeJSONRPC(dumps(query)))['result']['value']
 
 def setScreensaver(value):
     # Toggle the screensaver
@@ -309,13 +304,14 @@ def setScreensaver(value):
         }
     }
     log.debug("Toggling screensaver: %s %s"
-              % (value, xbmc.executeJSONRPC(json.dumps(query))))
+              % (value, xbmc.executeJSONRPC(dumps(query))))
+
 
 def reset():
-
-    dialog = xbmcgui.Dialog()
-
-    if dialog.yesno("Warning", "Are you sure you want to reset your local Kodi database?") == 0:
+    # Are you sure you want to reset your local Kodi database?
+    if not dialog('yesno',
+                  heading='{plex} %s ' % language(30132),
+                  line1=language(39600)):
         return
 
     # first stop any db sync
@@ -325,7 +321,10 @@ def reset():
         log.debug("Sync is running, will retry: %s..." % count)
         count -= 1
         if count == 0:
-            dialog.ok("Warning", "Could not stop the database from running. Try again.")
+            # Could not stop the database from running. Please try again later.
+            dialog('ok',
+                   heading='{plex} %s' % language(30132),
+                   line1=language(39601))
             return
         xbmc.sleep(1000)
 
@@ -371,14 +370,15 @@ def reset():
         tablename = row[0]
         if tablename != "version":
             cursor.execute("DELETE FROM " + tablename)
-    cursor.execute('DROP table IF EXISTS emby')
+    cursor.execute('DROP table IF EXISTS plex')
     cursor.execute('DROP table IF EXISTS view')
     connection.commit()
     cursor.close()
 
-    # Offer to wipe cached thumbnails
-    resp = dialog.yesno("Warning", "Remove all cached artwork?")
-    if resp:
+    # Remove all cached artwork? (recommended!)
+    if dialog('yesno',
+              heading='{plex} %s ' % language(30132),
+              line1=language(39602)):
         log.info("Resetting all cached artwork.")
         # Remove all existing textures first
         path = tryDecode(xbmc.translatePath("special://thumbnails/"))
@@ -387,15 +387,14 @@ def reset():
             for dir in allDirs:
                 allDirs, allFiles = xbmcvfs.listdir(path+dir)
                 for file in allFiles:
-                    if os.path.supports_unicode_filenames:
-                        xbmcvfs.delete(os.path.join(
+                    if os_path.supports_unicode_filenames:
+                        xbmcvfs.delete(os_path.join(
                             path + tryDecode(dir),
                             tryDecode(file)))
                     else:
-                        xbmcvfs.delete(os.path.join(
+                        xbmcvfs.delete(os_path.join(
                             tryEncode(path) + dir,
                             file))
-
         # remove all existing data from texture DB
         connection = kodiSQL('texture')
         cursor = connection.cursor()
@@ -411,34 +410,38 @@ def reset():
     # reset the install run flag
     settings('SyncInstallRunDone', value="false")
 
-    # Remove emby info
-    resp = dialog.yesno("Warning", "Reset all Plex KodiConnect Addon settings?")
-    if resp:
+    # Reset all PlexKodiConnect Addon settings? (this is usually NOT
+    # recommended and unnecessary!)
+    if dialog('yesno',
+              heading='{plex} %s ' % language(30132),
+              line1=language(39603)):
         # Delete the settings
         addon = xbmcaddon.Addon()
         addondir = tryDecode(xbmc.translatePath(addon.getAddonInfo('profile')))
         dataPath = "%ssettings.xml" % addondir
-        xbmcvfs.delete(tryEncode(dataPath))
         log.info("Deleting: settings.xml")
+        xbmcvfs.delete(tryEncode(dataPath))
 
-    dialog.ok(
-        heading=addonName,
-        line1="Database reset has completed, Kodi will now restart to apply the changes.")
+    # Kodi will now restart to apply the changes.
+    dialog('ok',
+           heading='{plex} %s ' % language(30132),
+           line1=language(33033))
     xbmc.executebuiltin('RestartApp')
+
 
 def profiling(sortby="cumulative"):
     # Will print results to Kodi log
     def decorator(func):
         def wrapper(*args, **kwargs):
 
-            pr = cProfile.Profile()
+            pr = Profile()
 
             pr.enable()
             result = func(*args, **kwargs)
             pr.disable()
 
-            s = StringIO.StringIO()
-            ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+            s = StringIO()
+            ps = Stats(pr, stream=s).sort_stats(sortby)
             ps.print_stats()
             log.info(s.getvalue())
 
@@ -453,7 +456,7 @@ def convertdate(date):
     except TypeError:
         # TypeError: attribute of type 'NoneType' is not callable
         # Known Kodi/python error
-        date = datetime(*(time.strptime(date, "%Y-%m-%dT%H:%M:%SZ")[0:6]))
+        date = datetime(*(strptime(date, "%Y-%m-%dT%H:%M:%SZ")[0:6]))
 
     return date
 
@@ -473,7 +476,7 @@ def normalize_nodes(text):
     # Remove dots from the last character as windows can not have directories
     # with dots at the end
     text = text.rstrip('.')
-    text = tryEncode(unicodedata.normalize('NFKD', unicode(text, 'utf-8')))
+    text = tryEncode(normalize('NFKD', unicode(text, 'utf-8')))
 
     return text
 
@@ -492,7 +495,7 @@ def normalize_string(text):
     # Remove dots from the last character as windows can not have directories
     # with dots at the end
     text = text.rstrip('.')
-    text = tryEncode(unicodedata.normalize('NFKD', unicode(text, 'utf-8')))
+    text = tryEncode(normalize('NFKD', unicode(text, 'utf-8')))
 
     return text
 
@@ -1022,8 +1025,8 @@ def changePlayState(itemType, kodiId, playCount, lastplayed):
     }
     query['method'] = method[itemType]
     query['params'] = params[itemType]
-    result = xbmc.executeJSONRPC(json.dumps(query))
-    result = json.loads(result)
+    result = xbmc.executeJSONRPC(dumps(query))
+    result = loads(result)
     result = result.get('result')
     log.debug("JSON result was: %s" % result)
 
@@ -1045,8 +1048,8 @@ class JSONRPC(object):
         }
         if self.params is not None:
             query['params'] = self.params
-        return json.dumps(query)
+        return dumps(query)
 
     def execute(self, params=None):
         self.params = params
-        return json.loads(xbmc.executeJSONRPC(self._query()))
+        return loads(xbmc.executeJSONRPC(self._query()))

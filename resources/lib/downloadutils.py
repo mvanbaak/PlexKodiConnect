@@ -6,10 +6,8 @@ import logging
 import requests
 import xml.etree.ElementTree as etree
 
-import xbmcgui
-
-from utils import settings, window
-import clientinfo
+from utils import settings, window, language as lang, dialog
+import clientinfo as client
 
 ###############################################################################
 
@@ -18,7 +16,6 @@ import requests.packages.urllib3
 requests.packages.urllib3.disable_warnings()
 
 log = logging.getLogger("PLEX."+__name__)
-addonName = 'PlexKodiConnect'
 
 ###############################################################################
 
@@ -101,7 +98,6 @@ class DownloadUtils():
         # Start session
         self.s = requests.Session()
 
-        client = clientinfo.ClientInfo()
         self.deviceId = client.getDeviceId()
         # Attach authenticated header to the session
         self.s.headers = client.getXArgsDeviceInfo()
@@ -140,7 +136,7 @@ class DownloadUtils():
         log.info('Request session stopped')
 
     def getHeader(self, options=None):
-        header = clientinfo.ClientInfo().getXArgsDeviceInfo()
+        header = client.getXArgsDeviceInfo()
         if options is not None:
             header.update(options)
         return header
@@ -282,10 +278,10 @@ class DownloadUtils():
                             log.debug('Setting PMS server status to '
                                       'unauthorized')
                             window('plex_serverStatus', value="401")
-                            xbmcgui.Dialog().notification(
-                                addonName,
-                                "Unauthorized for PMS",
-                                xbmcgui.NOTIFICATION_ERROR)
+                            dialog('notification',
+                                   lang(29999),
+                                   lang(30017),
+                                   icon='{error}')
                 else:
                     # there might be other 401 where e.g. PMS under strain
                     log.info('PMS might only be under strain')
